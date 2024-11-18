@@ -3459,6 +3459,11 @@ class Lex_input_stream {
   /** Pointer to the current position in the pre-processed input stream. */
   char *m_cpp_ptr;
 
+  /** 
+   * m_ptr和m_cpp_ptr的区别在于前者对应“原始”输入流, 后者对应“预处理”输入流
+   * 与“原始”输入流相比, “预处理”输入流是将相关注释信息去除后得到的数据流, 例如/*!50001*/
+   */
+
   /**
     Starting position of the last token parsed,
     in the pre-processed buffer.

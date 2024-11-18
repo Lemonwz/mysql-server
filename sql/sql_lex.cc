@@ -1297,6 +1297,7 @@ int MYSQLlex(YYSTYPE *yacc_yylval, YYLTYPE *yylloc, THD *thd) {
       return ABORT_SYM;
   }
 
+  /* look ahead token 相关处理逻辑 */
   if (lip->lookahead_token >= 0) {
     /*
       The next token was already parsed in advance,
@@ -1314,10 +1315,14 @@ int MYSQLlex(YYSTYPE *yacc_yylval, YYLTYPE *yylloc, THD *thd) {
     return token;
   }
 
+  /* 解析一个token */
   token = lex_one_token(yylval, thd);
+
+  /* 记录解析得到token的起始地址 */
   yylloc->cpp.start = lip->get_cpp_tok_start();
   yylloc->raw.start = lip->get_tok_start();
 
+  /* 对WITH和START token需要做额外处理(look ahead) */
   switch (token) {
     case WITH:
       /*
@@ -1349,8 +1354,11 @@ int MYSQLlex(YYSTYPE *yacc_yylval, YYLTYPE *yylloc, THD *thd) {
       break;
   }
 
+  /* 记录解析得到token的结束地址 */
   yylloc->cpp.end = lip->get_cpp_ptr();
   yylloc->raw.end = lip->get_ptr();
+
+  /* 计算token的digest值*/
   if (!lip->skip_digest) lip->add_digest_token(token, yylval);
   lip->skip_digest = false;
   return token;
@@ -1367,6 +1375,7 @@ static int lex_one_token(Lexer_yystype *yylval, THD *thd) {
   const my_lex_states *state_map = cs->state_maps->main_map;
   const uchar *ident_map = cs->ident_map;
 
+  /* 用于记录当前token解析过程中得到的信息 */
   lip->yylval = yylval;  // The global state
 
   lip->start_token();
@@ -1384,6 +1393,8 @@ static int lex_one_token(Lexer_yystype *yylval, THD *thd) {
 
         /* Start of real token */
         lip->restart_token();
+
+        /* MY_LEX_START是起始状态, 通过state_map进行状态转移 */
         c = lip->yyGet();
         state = state_map[c];
         break;
@@ -1396,10 +1407,12 @@ static int lex_one_token(Lexer_yystype *yylval, THD *thd) {
           break;
         }
 
+        /* '->' 用于获取JSON字段值 */
         if (c == '-' && lip->yyPeek() == '>')  // '->'
         {
           lip->yySkip();
           lip->next_state = MY_LEX_START;
+          /* '->>' 用于获取JSON字段值的字符串形式 */
           if (lip->yyPeek() == '>') {
             lip->yySkip();
             return JSON_UNQUOTED_SEPARATOR_SYM;
@@ -1417,6 +1430,7 @@ static int lex_one_token(Lexer_yystype *yylval, THD *thd) {
         if (c == '?' && lip->stmt_prepare_mode && !ident_map[lip->yyPeek()])
           return (PARAM_MARKER);
 
+        /* 返回字符的字节值, 多数情况下走到这里说明语法错误 */
         return ((int)c);
 
       case MY_LEX_IDENT_OR_NCHAR:
@@ -1449,6 +1463,7 @@ static int lex_one_token(Lexer_yystype *yylval, THD *thd) {
         const char *start;
         if (use_mb(cs)) {
           result_state = IDENT_QUOTED;
+          /* 如果给定字符是多字节字符, 则返回其所在多字节序列的长度 */
           switch (my_mbcharlen(cs, lip->yyGetLast())) {
             case 1:
               break;
@@ -1464,6 +1479,7 @@ static int lex_one_token(Lexer_yystype *yylval, THD *thd) {
               }
               lip->skip_binary(l - 1);
           }
+          /* 读取当前token的所有字符 */
           while (ident_map[c = lip->yyGet()]) {
             switch (my_mbcharlen(cs, c)) {
               case 1:
@@ -1485,6 +1501,7 @@ static int lex_one_token(Lexer_yystype *yylval, THD *thd) {
           /* If there were non-ASCII characters, mark that we must convert */
           result_state = result_state & 0x80 ? IDENT_QUOTED : IDENT;
         }
+        /* 当前token的长度 */
         length = lip->yyLength();
         start = lip->get_ptr();
         if (lip->ignore_space) {
@@ -1496,16 +1513,21 @@ static int lex_one_token(Lexer_yystype *yylval, THD *thd) {
             if (c == '\n') lip->yylineno++;
           }
         }
+        /* start != lip->get_ptr()说明在token与'.'之间存在空格, 则token不可能是一个标识符 */
         if (start == lip->get_ptr() && c == '.' && ident_map[lip->yyPeek()])
           lip->next_state = MY_LEX_IDENT_SEP;
         else {  // '(' must follow directly if function
+          /* 当前字符已不再属于前一个token */
           lip->yyUnget();
+          /* 判断读取的token是否是一个关键字或函数名 */
           if ((tokval = find_keyword(lip, length, c == '('))) {
             lip->next_state = MY_LEX_START;  // Allow signed numbers
             return (tokval);                 // Was keyword
           }
+          /* 回到next token的起始字符 */
           lip->yySkip();  // next state does a unget
         }
+        /* 记录token的字符串形式 */
         yylval->lex_str = get_token(lip, 0, length);
 
         /*
@@ -1777,6 +1799,10 @@ static int lex_one_token(Lexer_yystype *yylval, THD *thd) {
         /* " used for strings */
         // Fall through.
       case MY_LEX_STRING:  // Incomplete text string
+        /**
+         * 尝试向后查找相匹配的单引号或双引号, 并将两个引号间的内容记录到lex_str中,
+         * 如果没有找到匹配的引号, 则将当前字符作为普通的MY_LEX_CHAR处理
+         */
         if (!(yylval->lex_str.str = get_text(lip, 1, 1))) {
           state = MY_LEX_CHAR;  // Read char by char
           break;

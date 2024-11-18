@@ -729,6 +729,8 @@ class PT_query_expression_body : public Parse_tree_node {
   virtual bool is_union() const = 0;
 
   /**
+    根据上下文判断ORDER BY和LIMIT能否下推 
+    
     True if this query expression can absorb an extraneous order by/limit
     clause. The `ORDER BY`/`LIMIT` syntax is mostly consistestent, i.e. a
     trailing clause may not refer to the tables in the `<query primary>`, with
@@ -771,9 +773,13 @@ class PT_query_expression_body : public Parse_tree_node {
   */
   virtual bool can_absorb_order_and_limit(bool order, bool limit) const = 0;
   virtual bool has_into_clause() const = 0;
+
+  /* 判断SQL是否有INTO子句且是implicit from(在查询中省略表名而直接引用字段的情况, MySQL会根据上下文推断查询的表名) */
   virtual bool has_trailing_into_clause() const = 0;
 
   virtual bool is_table_value_constructor() const = 0;
+
+  /* 获取SQL中INSERT语句的插入值列表 */
   virtual PT_insert_values_list *get_row_value_list() const = 0;
 };
 
@@ -1378,15 +1384,25 @@ class PT_query_primary : public PT_query_expression_body {};
 class PT_query_specification : public PT_query_primary {
   typedef PT_query_primary super;
 
+  /** hint相关 */
   PT_hint_list *opt_hints;
+  /** 查询选项 */
   Query_options options;
+  /** 查询字段 */
   PT_item_list *item_list;
+  /** INTO子句相关 */
   PT_into_destination *opt_into1;
+  /** 是否包含显式FROM子句 */
   const bool m_is_from_clause_implicit;
+  /** FROM子句相关 */
   Mem_root_array_YY<PT_table_reference *> from_clause;  // empty list for DUAL
+  /** WHERE子句相关 */
   Item *opt_where_clause;
+  /** GROUP BY子句相关 */
   PT_group *opt_group_clause;
+  /** HAVING子句相关 */
   Item *opt_having_clause;
+  /** 窗口函数相关 */
   PT_window_list *opt_window_clause;
 
  public:

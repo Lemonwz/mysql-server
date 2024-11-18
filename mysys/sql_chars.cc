@@ -74,47 +74,50 @@ bool init_state_maps(CHARSET_INFO *cs) {
 
   if (lex_state_maps == nullptr) return true;  // OOM
 
+  /* 在lex_one_token()中通过thd->charset()获取state_maps */
   cs->state_maps = lex_state_maps;
   state_map = lex_state_maps->main_map;
 
   if (!(cs->ident_map = ident_map = (uchar *)my_once_alloc(256, MYF(MY_WME))))
     return true;  // OOM
 
+  /* 初始化mysql_hint_state_maps */
   hint_lex_init_maps(cs, lex_state_maps->hint_map);
 
   /* Fill state_map with states to get a faster parser */
   for (i = 0; i < 256; i++) {
     if (my_isalpha(cs, i))
-      state_map[i] = MY_LEX_IDENT;
+      state_map[i] = MY_LEX_IDENT;  /* 字母 */
     else if (my_isdigit(cs, i))
-      state_map[i] = MY_LEX_NUMBER_IDENT;
+      state_map[i] = MY_LEX_NUMBER_IDENT;  /* 数字 */
     else if (my_ismb1st(cs, i))
       /* To get whether it's a possible leading byte for a charset. */
-      state_map[i] = MY_LEX_IDENT;
+      state_map[i] = MY_LEX_IDENT;  /* 多字节字符的前导字符(第一个字符) */
     else if (my_isspace(cs, i))
-      state_map[i] = MY_LEX_SKIP;
+      state_map[i] = MY_LEX_SKIP;  /* 空格*/
     else
-      state_map[i] = MY_LEX_CHAR;
+      state_map[i] = MY_LEX_CHAR;  /* 其它 */
   }
   state_map[(uchar)'_'] = state_map[(uchar)'$'] = MY_LEX_IDENT;
-  state_map[(uchar)'\''] = MY_LEX_STRING;
+  state_map[(uchar)'\''] = MY_LEX_STRING;  /* 字符串 */
   state_map[(uchar)'.'] = MY_LEX_REAL_OR_POINT;
-  state_map[(uchar)'>'] = state_map[(uchar)'='] = state_map[(uchar)'!'] =
+  state_map[(uchar)'>'] = state_map[(uchar)'='] = state_map[(uchar)'!'] =  /* 比较符 */
       MY_LEX_CMP_OP;
-  state_map[(uchar)'<'] = MY_LEX_LONG_CMP_OP;
-  state_map[(uchar)'&'] = state_map[(uchar)'|'] = MY_LEX_BOOL;
-  state_map[(uchar)'#'] = MY_LEX_COMMENT;
-  state_map[(uchar)';'] = MY_LEX_SEMICOLON;
+  state_map[(uchar)'<'] = MY_LEX_LONG_CMP_OP;  /* 比较符 */
+  state_map[(uchar)'&'] = state_map[(uchar)'|'] = MY_LEX_BOOL;  /* 且和或 */
+  state_map[(uchar)'#'] = MY_LEX_COMMENT;  /* 注释字符 */
+  state_map[(uchar)';'] = MY_LEX_SEMICOLON;  /* 分隔符 */
   state_map[(uchar)':'] = MY_LEX_SET_VAR;
-  state_map[0] = MY_LEX_EOL;
+  state_map[0] = MY_LEX_EOL;  /* 词法解析结束标志 */
   state_map[(uchar)'/'] = MY_LEX_LONG_COMMENT;
   state_map[(uchar)'*'] = MY_LEX_END_LONG_COMMENT;
-  state_map[(uchar)'@'] = MY_LEX_USER_END;
+  state_map[(uchar)'@'] = MY_LEX_USER_END;  /* user_name@host_name */
   state_map[(uchar)'`'] = MY_LEX_USER_VARIABLE_DELIMITER;
-  state_map[(uchar)'"'] = MY_LEX_STRING_OR_DELIMITER;
+  state_map[(uchar)'"'] = MY_LEX_STRING_OR_DELIMITER;  /* 字符串 */
 
   /*
     Create a second map to make it faster to find identifiers
+    用于加速判断一个字符是不是IDENT
   */
   for (i = 0; i < 256; i++) {
     ident_map[i] = (uchar)(state_map[i] == MY_LEX_IDENT ||
