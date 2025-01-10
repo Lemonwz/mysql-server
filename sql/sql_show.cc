@@ -1877,14 +1877,20 @@ bool store_create_info(THD *thd, TABLE_LIST *table_list, String *packet,
 
   restore_record(table, s->default_values);  // Get empty record
 
+  /* Create table */
   if (share->tmp_table)
     packet->append(STRING_WITH_LEN("CREATE TEMPORARY TABLE "));
   else
     packet->append(STRING_WITH_LEN("CREATE TABLE "));
+  
+  /* Create option */
   if (create_info_arg &&
       (create_info_arg->options & HA_LEX_CREATE_IF_NOT_EXISTS))
     packet->append(STRING_WITH_LEN("IF NOT EXISTS "));
+  
+  /* Table name */
   if (table_list->schema_table)
+    /* Information schema table */
     alias = table_list->schema_table->table_name;
   else {
     if (lower_case_table_names == 2)
@@ -1903,6 +1909,8 @@ bool store_create_info(THD *thd, TABLE_LIST *table_list, String *packet,
    */
   const LEX_CSTRING *const db =
       table_list->schema_table ? &INFORMATION_SCHEMA_NAME : &table->s->db;
+  
+  /* Database name (if necessary) */
   if (show_database) {
     if (!thd->db().str || strcmp(db->str, thd->db().str)) {
       append_identifier(thd, packet, db->str, db->length);
@@ -1910,8 +1918,10 @@ bool store_create_info(THD *thd, TABLE_LIST *table_list, String *packet,
     }
   }
 
+  /* Table name */
   append_identifier(thd, packet, alias, strlen(alias));
   packet->append(STRING_WITH_LEN(" (\n"));
+
   /*
     We need this to get default values from the table
     We have to restore the read_set if we are called from insert in case
@@ -1935,6 +1945,7 @@ bool store_create_info(THD *thd, TABLE_LIST *table_list, String *packet,
     });
   }
 
+  /* Table fields */
   for (ptr = table->field; (field = *ptr); ptr++) {
     // Skip hidden system fields.
     if (field->is_hidden_by_system()) continue;
@@ -2092,6 +2103,7 @@ bool store_create_info(THD *thd, TABLE_LIST *table_list, String *packet,
     }
   }
 
+  /* Table keys */
   key_info = table->key_info;
   /* Allow update_create_info to update row type */
   create_info.row_type = share->row_type;
@@ -2172,6 +2184,8 @@ bool store_create_info(THD *thd, TABLE_LIST *table_list, String *packet,
     Append check constraints to the CREATE TABLE statement. All check
     constraints are listed in table check constraint form.
   */
+
+  /* Table check constraints */
   if (table->table_check_constraint_list != nullptr) {
     for (auto &cc : *table->table_check_constraint_list) {
       packet->append(STRING_WITH_LEN(",\n  CONSTRAINT "));
@@ -2261,6 +2275,8 @@ bool store_create_info(THD *thd, TABLE_LIST *table_list, String *packet,
       IF   check_create_info
       THEN add ENGINE only if it was used when creating the table
     */
+
+    /* Table storage engine */
     if (!create_info_arg ||
         (create_info_arg->used_fields & HA_CREATE_USED_ENGINE)) {
       packet->append(STRING_WITH_LEN(" ENGINE="));
@@ -2287,6 +2303,7 @@ bool store_create_info(THD *thd, TABLE_LIST *table_list, String *packet,
       but may extrapolate its existence from that of an AUTO_INCREMENT column.
     */
 
+    /* Auto increment */
     if (create_info.auto_increment_value > 1) {
       char *end;
       packet->append(STRING_WITH_LEN(" AUTO_INCREMENT="));
@@ -2294,6 +2311,7 @@ bool store_create_info(THD *thd, TABLE_LIST *table_list, String *packet,
       packet->append(buff, (uint)(end - buff));
     }
 
+    /* Table charset */
     if (share->table_charset) {
       /*
         IF   check_create_info
@@ -2311,6 +2329,7 @@ bool store_create_info(THD *thd, TABLE_LIST *table_list, String *packet,
       }
     }
 
+    /* Table min_rows */
     if (share->min_rows) {
       char *end;
       packet->append(STRING_WITH_LEN(" MIN_ROWS="));
@@ -2318,6 +2337,7 @@ bool store_create_info(THD *thd, TABLE_LIST *table_list, String *packet,
       packet->append(buff, (uint)(end - buff));
     }
 
+    /* Table max_rows */
     if (share->max_rows && !table_list->schema_table) {
       char *end;
       packet->append(STRING_WITH_LEN(" MAX_ROWS="));
@@ -2325,6 +2345,7 @@ bool store_create_info(THD *thd, TABLE_LIST *table_list, String *packet,
       packet->append(buff, (uint)(end - buff));
     }
 
+    /* Table avg_row_length */
     if (share->avg_row_length) {
       char *end;
       packet->append(STRING_WITH_LEN(" AVG_ROW_LENGTH="));
@@ -2441,6 +2462,8 @@ bool store_create_info(THD *thd, TABLE_LIST *table_list, String *packet,
     append_directory(thd, packet, "DATA", create_info.data_file_name);
     append_directory(thd, packet, "INDEX", create_info.index_file_name);
   }
+
+  /* Table partition info */
   {
     if (table->part_info &&
         !(table->s->db_type()->partition_flags &&

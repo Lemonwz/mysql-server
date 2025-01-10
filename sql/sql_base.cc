@@ -534,6 +534,11 @@ static TABLE_SHARE *process_found_table_share(THD *thd MY_ATTRIBUTE((unused)),
       Unlink share from this list
     */
     DBUG_PRINT("info", ("Unlinking from not used list"));
+
+    /**
+     * remove时, 如果share是oldest_unused_share, oldest_unused_share可以表示为share->prev
+     * 则此时oldest_unused_share为share->next, 其它场景下就是正常的链表操作
+     */
     *share->prev = share->next;
     share->next->prev = share->prev;
     share->next = nullptr;
@@ -974,6 +979,11 @@ void release_table_share(TABLE_SHARE *share) {
       DBUG_PRINT("info", ("moving share to unused list"));
 
       assert(share->next == nullptr);
+      /**
+       * 初始状态下, oldest_unused_share = &end_of_unused_share, end_of_unused_share.prev = oldest_unused_share
+       * 在插入share后变为, oldest_unused_share <- share <- end_of_unused_share
+       * 如果当前share是插入链表的第一个share, 则还会有 oldest_unused_share = share
+       */
       share->prev = end_of_unused_share.prev;
       *end_of_unused_share.prev = share;
       end_of_unused_share.prev = &share->next;
