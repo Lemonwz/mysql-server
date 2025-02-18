@@ -1927,6 +1927,8 @@ static bool fill_partitioning_from_dd(THD *thd, TABLE_SHARE *share,
   part_info->default_engine_type = hton;
   if (!part_info->default_engine_type) return true;
 
+  /* 1. Fill partition type. */
+
   // TODO-PARTITION: change partition_info::part_type to same enum as below :)
   switch (tab_obj->partition_type()) {
     case dd::Table::PT_RANGE_COLUMNS:
@@ -1980,6 +1982,9 @@ static bool fill_partitioning_from_dd(THD *thd, TABLE_SHARE *share,
       assert(0); /* purecov: deadcode */
       return true;
   }
+
+  /* 2. Fill subpartition type. */
+
   switch (tab_obj->subpartition_type()) {
     case dd::Table::ST_NONE:
       part_info->subpart_type = partition_type::NONE;
@@ -2012,6 +2017,8 @@ static bool fill_partitioning_from_dd(THD *thd, TABLE_SHARE *share,
       return true;
   }
 
+  /* 3. Fill partition expression. */
+
   dd::String_type part_expr = tab_obj->partition_expression();
   if (part_info->list_of_part_fields) {
     if (set_field_list(&share->mem_root, part_expr,
@@ -2025,6 +2032,9 @@ static bool fill_partitioning_from_dd(THD *thd, TABLE_SHARE *share,
         strdup_root(&share->mem_root, part_expr.c_str());
     part_info->part_func_len = part_expr.length();
   }
+
+  /* 4. Fill subpartition expression. */
+
   dd::String_type subpart_expr = tab_obj->subpartition_expression();
   part_info->subpart_func_len = subpart_expr.length();
   if (part_info->subpart_func_len) {
@@ -2040,6 +2050,8 @@ static bool fill_partitioning_from_dd(THD *thd, TABLE_SHARE *share,
           strdup_root(&share->mem_root, subpart_expr.c_str());
     }
   }
+
+  /* 5. Fill partition and subpartition elements. */
 
   //
   // Iterate through all the partitions
@@ -2093,9 +2105,13 @@ static bool fill_partitioning_from_dd(THD *thd, TABLE_SHARE *share,
     }
   }
 
+  /* 6. Fill partition and subpartition count. */
+
   // Get partition and sub_partition count.
   part_info->num_parts = part_info->partitions.elements;
   part_info->num_subparts = part_info->partitions[0]->subpartitions.elements;
+
+  /* 7. Fill default partition and subpartition flags. */
 
   switch (tab_obj->default_partitioning()) {
     case dd::Table::DP_NO:
@@ -2140,6 +2156,8 @@ static bool fill_partitioning_from_dd(THD *thd, TABLE_SHARE *share,
   // Turn off ANSI_QUOTES and other SQL modes which affect printing of
   // generated partitioning clause.
   Sql_mode_parse_guard parse_guard(thd);
+
+  /* 8. Generate and fill partition definition string. */
 
   buf = generate_partition_syntax(part_info, &buf_len, true, true, false,
                                   nullptr);

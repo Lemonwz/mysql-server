@@ -213,6 +213,7 @@ class partition_info {
   List<partition_element> partitions;
   List<partition_element> temp_partitions;
 
+  /* For KEY or LIST/RANGE COLUMNS fields */
   List<char> part_field_list;
   List<char> subpart_field_list;
 
@@ -286,9 +287,11 @@ class partition_info {
   uchar **restore_part_field_ptrs;
   uchar **restore_subpart_field_ptrs;
 
+  /* partition_info的part_expr和subpart_expr是在parse过程中设置的, table_share中的part_info的这两个字段在从dd加载时应该是为空的, 需要验证一下 */
   Item *part_expr;
   Item *subpart_expr;
 
+  /* 这个是干嘛的, 分区定义中的item_list? */
   Item *item_list;
 
   /*
@@ -318,6 +321,7 @@ class partition_info {
   bool bitmaps_are_initialized;
   // TODO: Add first_read_partition and num_read_partitions?
 
+  /* 每个分区定义的具体值? partition_element表示的是每个单独的分区定义 */
   union {
     longlong *range_int_array;
     LIST_PART_ENTRY *list_array;
